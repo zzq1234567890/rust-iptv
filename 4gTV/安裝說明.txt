@@ -1,0 +1,58 @@
+1.下載對應的版本,然後命名為4gtv
+2.創建/opt/4gtv 並且上傳到/opt/4gtv,權限改為777 用winscp實現
+3.用putyy登錄 輸入opkg update && opkg install file   ,然后检查它：file /opt/4gtv/4gtv
+4.putty下運行cd /opt/4gtv
+PORT=12345 BASE_PATH=/mysecret ./4gtv
+5.  putty下整體複製輸入下面
+cat > /etc/init.d/4gtv <<'EOF'
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=99
+STOP=10
+
+start_service() {
+    procd_open_instance
+    procd_set_param command /opt/4gtv/4gtv
+    procd_set_param cwd /opt/4gtv
+    procd_set_param env PORT=12345 BASE_PATH=/mysecret
+    procd_set_param respawn 3600 5 5
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}
+EOF
+整體複製輸入
+
+
+(注：这里的端口是 12345，隐藏路径是 /mysecret，如果你想改，修改上面代码里的数字和字母即可)
+6. 赋予权限并启动服务
+輸入下載命令
+bash
+
+chmod +x /etc/init.d/4gtv
+/etc/init.d/4gtv enable
+/etc/init.d/4gtv start
+
+7. 检查服务状态
+bash
+
+/etc/init.d/4gtv status
+
+
+
+如果显示 running，说明后台跑起来了。
+8.路由器防火墻增加端口12345 訪問
+
+8. 最后一步：获取你的管理面板地址
+
+执行下面这条命令，查看自动生成的管理密钥：
+bash
+
+cat /opt/4gtv/4gtv_admin_key.txt
+
+然后，在浏览器里打开（把里面的 IP 和 key 换成你自己的）：
+👉 http://你的路由器IP:12345/mysecret/admin?key=刚才查到的密钥
+
+
+
