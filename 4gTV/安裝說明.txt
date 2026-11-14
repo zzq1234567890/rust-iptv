@@ -3,7 +3,19 @@
 3.用putyy登錄 輸入opkg update && opkg install file   ,然后检查它：file /opt/4gtv/4gtv
 4.putty下運行cd /opt/4gtv
 PORT=12345 BASE_PATH=/mysecret ./4gtv
-5.  putty下整體複製輸入下面
+
+1. 停掉现在的服务，并清理根目录下的垃圾文件
+bash
+
+/etc/init.d/4gtv stop
+# 看看根目录下是不是生成了这些文件，如果有，删掉
+rm -f /4gtv_config.json /4gtv_admin_key.txt /env
+
+2. 重写启动脚本（强制 cd）
+
+复制下面整段代码，粘贴到终端回车，覆盖原来的脚本：
+sh
+
 cat > /etc/init.d/4gtv <<'EOF'
 #!/bin/sh /etc/rc.common
 
@@ -13,8 +25,8 @@ STOP=10
 
 start_service() {
     procd_open_instance
-    procd_set_param command /opt/4gtv/4gtv
-    procd_set_param cwd /opt/4gtv
+    # 使用 sh -c 强制切换目录并启动
+    procd_set_param command /bin/sh -c 'cd /opt/4gtv && exec ./4gtv'
     procd_set_param env PORT=12345 BASE_PATH=/mysecret
     procd_set_param respawn 3600 5 5
     procd_set_param stdout 1
@@ -22,7 +34,35 @@ start_service() {
     procd_close_instance
 }
 EOF
-整體複製輸入
+
+3. 重新赋予权限并启动
+bash
+
+chmod +x /etc/init.d/4gtv
+/etc/init.d/4gtv start
+
+4. 验证是否修复成功
+
+现在重启一下服务，或者直接重启路由器：
+bash
+
+/etc/init.d/4gtv restart
+
+然后检查文件是否正确生成在 /opt/4gtv/ 里面了：
+bash
+
+ls -l /opt/4gtv/
+
+你应该能看到 4gtv_admin_key.txt 和 4gtv_config.json 等文件都在这个目录下了。
+
+再检查一下根目录 /，确认没有新生成的文件：
+bash
+
+ls -l /
+
+这样修改后，每次开机或者重启服务，程序都会被强制“锁”在 /opt/4gtv/ 目录下运行，生成的配置文件、缓存等就不会再跑到根目录去了。
+本回答由 AI 生成，内容仅供参考，请仔细甄别
+
 
 
 (注：这里的端口是 12345，隐藏路径是 /mysecret，如果你想改，修改上面代码里的数字和字母即可)
