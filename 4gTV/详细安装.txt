@@ -1,0 +1,94 @@
+阶段一：准备文件（已完成）
+1.手动下载了正确的二进制文件并上传到了 /opt/4gtv/ 目录。
+
+阶段二：完整部署代码（直接从这步开始）
+
+1.请将下面这一整段代码复制，粘贴到 OpenWrt 的 SSH 终端中回车执行。它会自动完成：清理残留、设置权限、创建 OpenWrt 专属的 procd 服务、修复文件生成到根目录的 bug，并配置防火墙。
+#!/bin/sh
+
+echo "=== 1. 清理之前可能生成在根目录的错误文件 ==="
+rm -f /4gtv_config.json /4gtv_admin_key.txt /env /4gtv
+
+echo "=== 2. 重命名并赋予执行权限 ==="
+# 确保文件名为 4gtv
+if [ -f /opt/4gtv/4gtv-linux-arm64 ]; then
+    mv /opt/4gtv/4gtv-linux-arm64 /opt/4gtv/4gtv
+fi
+chmod +x /opt/4gtv/4gtv
+
+echo "=== 3. 写入 OpenWrt (procd) 服务脚本 ==="
+cat > /etc/init.d/4gtv <<'EOF'
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=99
+STOP=10
+
+start_service() {
+    procd_open_instance
+    # 【核心修复】强制进入 /opt/4gtv 再运行，解决配置文件生成到根目录的问题
+    procd_set_param command /bin/sh -c 'cd /opt/4gtv && exec ./4gtv'
+    # 环境变量：端口(12345) 和 隐藏路径(/mysecret)，可自行修改
+    procd_set_param env PORT=12345 BASE_PATH=/mysecret
+    procd_set_param respawn 3600 5 5
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}
+EOF
+
+chmod +x /etc/init.d/4gtv
+/etc/init.d/4gtv enable
+
+echo "=== 4. 启动并重启服务 ==="
+/etc/init.d/4gtv restart
+sleep 2
+
+echo "=== 5. 配置防火墙 (放行 TCP 12345 端口) ==="
+uci -q delete firewall.4gtv_lan
+uci set firewall.4gtv_lan=rule
+uci set firewall.4gtv_lan.name='4gtv-lan'
+uci set firewall.4gtv_lan.src='lan'
+uci set firewall.4gtv_lan.dest_port='12345'
+uci set firewall.4gtv_lan.proto='tcp'
+uci set firewall.4gtv_lan.target='ACCEPT'
+uci commit firewall
+/etc/init.d/firewall restart
+
+echo "=== 6. 验证运行状态与获取密钥 ==="
+echo "服务状态: $(/etc/init.d/4gtv status)"
+echo "------------------------------------------------"
+echo "管理密钥:"
+cat /opt/4gtv/4gtv_admin_key.txt 2>/dev/null || echo "密钥未生成，请运行 logread -e 4gtv 查看原因"
+echo "------------------------------------------------"
+echo "请使用浏览器访问以下地址 (将 IP 替换为你路由器的 IP):"
+echo "管理面板: http://192.168.1.1:12345/mysecret/admin?key=你的密钥"
+echo "播放器:   http://192.168.1.1:12345/mysecret/player"
+echo "订阅链接: http://192.168.1.1:12345/mysecret/4gtv.m3u"
+echo "=== 部署完成 ==="
+
+阶段三：日后运维指南（OpenWrt 专属）
+
+因为你的 OpenWrt 没有 systemd 和 systemctl，请用以下命令替代原作者的 README：
+
+功能 OpenWrt 命令
+重启服务 /etc/init.d/4gtv restart
+停止服务 /etc/init.d/4gtv stop
+启动服务 /etc/init.d/4gtv start
+查看运行状态 /etc/init.d/4gtv status
+查看运行日志 (替代原 journalctl) logread -e 4gtv
+实时查看日志 logread -f -e 4gtv
+
+
+阶段四：日后如何更新版本？
+
+当作者发布新版本时，你不需要重新配置，只需要替换二进制文件即可（配置和频道数据会保留在 /opt/4gtv/ 里）：
+/etc/init.d/4gtv stop
+# 1. 下载最新文件（用镜像）
+curl -fsSL -o /opt/4gtv/4gtv.new https://ghfast.top/https://raw.githubusercontent.com/YanG-1989/rust/main/4gTV/4gtv-linux-arm64
+# 2. 替换并赋权
+mv /opt/4gtv/4gtv.new /opt/4gtv/4gtv
+chmod +x /opt/4gtv/4gtv
+# 3. 重启服务
+/etc/init.d/4gtv start
+
